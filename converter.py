@@ -34,32 +34,51 @@ if check_password():
         # Buffer für das ZIP-Archiv im Speicher
         zip_buffer = BytesIO()
         
-        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zip_file:
+        
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
             for index, row in df.iterrows():
-                # vCard-Logik
-                vcard = [
-                    "BEGIN:VCARD", "VERSION:3.0",
-                    f"N:{row.get('Name','')};{row.get('Vorname','')};;;",
-                    f"FN:{row.get('Vorname','')} {row.get('Name','')}",
-                    f"ORG:{row.get('Firma','')};{row.get('Abteilung','')}",
-                    f"TEL;TYPE=WORK,VOICE:{row.get('Telefon','')}",
-                    f"TEL;TYPE=CELL,VOICE:{row.get('Mobiltelefon','')}",
-                    f"ADR;TYPE=WORK:;;{row.get('Adresse','')};;;",
-                    f"EMAIL;TYPE=PREF,INTERNET:{row.get('Email','')}",
-                    f"URL:{row.get('URL','')}",
-                    "END:VCARD"
-                ]
-                vcard_content = "\n".join(vcard)
-                
-                # Datei dem ZIP hinzufügen
-                filename = f"{row.get('Vorname','unbekannt')}_{row.get('Name','kontakt')}.vcf"
-                zip_file.writestr(filename, vcard_content)
+                # Zuordnung nach Spalten-Index (A=0, B=1, C=2, ...)
+                def val(idx):
+                    v = row[idx] if idx in row else ""
+                    return str(v).strip() if pd.notna(v) else ""
 
-        # Download Button
-        st.success(f"{len(df)} Kontakte verarbeitet!")
-        st.download_button(
-            label="📥 ZIP mit allen vCards herunterladen",
-            data=zip_buffer.getvalue(),
-            file_name="visitenkarten.zip",
-            mime="application/zip"
-        )
+                firma   = val(0) # A
+                name    = val(1) # B
+                vorname = val(2) # C
+                abt     = val(3) # D
+                adr     = val(4) # E
+                tel     = val(5) # F
+                mobil   = val(6) # G
+                email   = val(7) # H
+                url     = val(8) # I
+
+                if name or vorname:
+                    vcard = [
+                        "BEGIN:VCARD",
+                        "VERSION:3.0",
+                        f"N:{name};{vorname};;;",
+                        f"FN:{vorname} {name}".strip(),
+                        f"ORG:{firma};{abt}",
+                        f"TEL;TYPE=WORK,VOICE:{tel}",
+                        f"TEL;TYPE=CELL,VOICE:{mobil}",
+                        f"ADR;TYPE=WORK:;;{adr};;;",
+                        f"EMAIL;TYPE=PREF,INTERNET:{email}",
+                        f"URL:{url}",
+                        "END:VCARD"
+                    ]
+                    vcard_content = "\n".join(vcard)
+                    
+                    # Dateiname generieren
+                    safe_name = f"{vorname}_{name}".replace(" ", "_")
+                    filename = f"Kontakt_{index+1}_{safe_name}.vcf"
+                    zip_file.writestr(filename, vcard_content)
+
+        if zip_buffer.tell() > 0:
+            st.success(f"{len(df)} Kontakte im ZIP-Archiv bereit!")
+            st.download_button(
+                label="📥 ZIP herunterladen",
+                data=zip_buffer.getvalue(),
+                file_name="visitenkarten_export.zip",
+                mime="application/zip"
+            )
+
