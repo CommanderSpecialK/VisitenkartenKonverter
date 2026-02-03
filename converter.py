@@ -27,32 +27,41 @@ if check_password():
 
     # Datei-Upload
     uploaded_file = st.file_uploader("Excel-Datei auswählen", type=["xlsx"])
+
     
     if uploaded_file:
-        df = pd.read_excel(uploaded_file)
+        # header=None ist wichtig, da keine Überschriften existieren
+        df = pd.read_excel(uploaded_file, header=None)
         
-        # Buffer für das ZIP-Archiv im Speicher
+        st.write("### Vorschau der erkannten Daten:")
+        st.dataframe(df.head()) # Zeigt die ersten Zeilen zur Kontrolle
+        
         zip_buffer = BytesIO()
-        
+        contact_count = 0
         
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
             for index, row in df.iterrows():
-                # Zuordnung nach Spalten-Index (A=0, B=1, C=2, ...)
-                def val(idx):
-                    v = row[idx] if idx in row else ""
-                    return str(v).strip() if pd.notna(v) else ""
+                # Funktion zur sicheren Datenextraktion
+                def get_v(col_index):
+                    try:
+                        val = row[col_index]
+                        return str(val).strip() if pd.notna(val) else ""
+                    except:
+                        return ""
 
-                firma   = val(0) # A
-                name    = val(1) # B
-                vorname = val(2) # C
-                abt     = val(3) # D
-                adr     = val(4) # E
-                tel     = val(5) # F
-                mobil   = val(6) # G
-                email   = val(7) # H
-                url     = val(8) # I
+                # Spalten-Mapping basierend auf Ihrer Beschreibung (A=0, B=1, ...)
+                firma    = get_v(0) # Spalte A
+                name     = get_v(1) # Spalte B
+                vorname  = get_v(2) # Spalte C
+                abt      = get_v(3) # Spalte D
+                adr      = get_v(4) # Spalte E
+                tel      = get_v(5) # Spalte F
+                mobil    = get_v(6) # Spalte G
+                email    = get_v(7) # Spalte H
+                url      = get_v(8) # Spalte I
 
-                if name or vorname:
+                # Wir erstellen eine vCard, solange IRGENDETWAS in der Zeile steht
+                if any([name, vorname, firma, email]):
                     vcard = [
                         "BEGIN:VCARD",
                         "VERSION:3.0",
@@ -66,19 +75,24 @@ if check_password():
                         f"URL:{url}",
                         "END:VCARD"
                     ]
-                    vcard_content = "\n".join(vcard)
+                    vcard_str = "\n".join(vcard)
                     
-                    # Dateiname generieren
-                    safe_name = f"{vorname}_{name}".replace(" ", "_")
-                    filename = f"Kontakt_{index+1}_{safe_name}.vcf"
-                    zip_file.writestr(filename, vcard_content)
+                    # Dateiname: Nutze Name oder Index falls Name fehlt
+                    display_name = f"{vorname}_{name}".strip() or f"Kontakt_{index+1}"
+                    filename = f"{display_name}.vcf".replace("/", "-")
+                    
+                    zip_file.writestr(filename, vcard_str)
+                    contact_count += 1
 
-        if zip_buffer.tell() > 0:
-            st.success(f"{len(df)} Kontakte im ZIP-Archiv bereit!")
+        if contact_count > 0:
+            st.success(f"✅ {contact_count} vCards wurden erfolgreich erstellt!")
             st.download_button(
-                label="📥 ZIP herunterladen",
+                label="📥 ZIP-Archiv herunterladen",
                 data=zip_buffer.getvalue(),
                 file_name="visitenkarten_export.zip",
                 mime="application/zip"
             )
+        else:
+            st.warning("⚠️ Keine Daten gefunden. Prüfen Sie, ob die Excel-Datei in den Spalten A bis I Daten enthält.")
+
 
